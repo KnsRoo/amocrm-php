@@ -34,12 +34,12 @@ class Request
     /**
      * @var ParamsBag|null Экземпляр ParamsBag для хранения аргументов
      */
-    private $parameters = null;
+    protected $parameters = null;
 
     /**
      * @var CurlHandle Экземпляр CurlHandle
      */
-    private $curlHandle;
+    protected $curlHandle;
 
     /**
      * @var int|null Последний полученный HTTP код
@@ -118,6 +118,7 @@ class Request
      */
     protected function getRequest($url, $parameters = [], $modified = null)
     {
+
         if (!empty($parameters)) {
             $this->parameters->addGet($parameters);
         }
@@ -143,6 +144,15 @@ class Request
         return $this->request($url);
     }
 
+    protected function patchRequest($url, $parameters = [])
+    {
+        if (!empty($parameters)) {
+            $this->parameters->addPatch($parameters);
+        }
+
+        return $this->request($url);
+    }
+
     /**
      * Подготавливает список заголовков HTTP
      *
@@ -155,6 +165,10 @@ class Request
             'Connection: keep-alive',
             'Content-Type: application/json',
         ];
+
+        if ($this->parameters->getAuth('authType') == 'oauth2') {
+          $headers[] = 'Authorization: Bearer ' . $this->parameters->getAuth('accessToken');
+        }
 
         if ($modified !== null) {
             if (is_int($modified)) {
@@ -175,7 +189,10 @@ class Request
      */
     protected function prepareEndpoint($url)
     {
-        if ($this->v1 === false) {
+        if ($this->parameters->getAuth('authType') == 'oauth2') {
+          $query = http_build_query( $this->parameters->getGet() );
+        }
+        elseif ($this->v1 === false) {
             $query = http_build_query(array_merge($this->parameters->getGet(), [
                 'USER_LOGIN' => $this->parameters->getAuth('login'),
                 'USER_HASH' => $this->parameters->getAuth('apikey'),
@@ -225,6 +242,15 @@ class Request
             $this->printDebug('post params', $fields);
         }
 
+        if ($this->parameters->hasPatch()) {
+            $fields = json_encode([
+                'request' => $this->parameters->getPatch(),
+            ]);
+            curl_setopt($curl, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $fields);
+            $this->printDebug('post params', $fields);
+        }
+
         if ($this->parameters->hasProxy()) {
             curl_setopt($ch, CURLOPT_PROXY, $this->parameters->getProxy());
         }
@@ -263,26 +289,32 @@ class Request
     {
         $result = json_decode($response, true);
 
+        //TODO
+        //Попробовать получить токен в случае неудачи
+        if ($info['http_code'] == 401){
+            throw new Exception('Unauthorized', 401);
+        }
+
         if (floor($info['http_code'] / 100) >= 3) {
-            if (isset($result['response']['error_code']) && $result['response']['error_code'] > 0) {
-                $code = $result['response']['error_code'];
+            if (isset($result['error_code']) && $result['error_code'] > 0) {
+                $code = $result['error_code'];
             } elseif ($result !== null) {
                 $code = 0;
             } else {
                 $code = $info['http_code'];
             }
-            if ($this->v1 === false && isset($result['response']['error'])) {
-                throw new Exception($result['response']['error'], $code);
-            } elseif (isset($result['response'])) {
-                throw new Exception(json_encode($result['response']));
+            if ($this->v1 === false && isset($result['detail'])) {
+                throw new Exception($result['detail'], $code);
+            } elseif (isset($result)) {
+                throw new Exception(json_encode($result));
             } else {
                 throw new Exception('Invalid response body.', $code);
             }
-        } elseif (!isset($result['response'])) {
+        } elseif (!isset($result)) {
             return false;
         }
 
-        return $result['response'];
+        return $result;
     }
 
     /**

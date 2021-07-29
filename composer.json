@@ -1,5 +1,5 @@
 {
-    "name": "knsroo/amocrm",
+    "name": "dotzero/amocrm",
     "description": "Удобный и быстрый клиент для работы с API amoCRM",
     "license": "MIT",
     "keywords": ["amocrm", "crm", "api"],
@@ -7,10 +7,6 @@
         {
             "name": "dotzero",
             "email": "mail@dotzero.ru"
-        },
-        {
-            "name": "knsroo",
-            "email": "knsroo@gmail.com"
         }
     ],
     "require": {
@@ -21,7 +17,7 @@
     },
     "autoload": {
         "psr-4": {
-            "AmoCRM4\\": "src"
+            "AmoCRM\\": "src"
         }
     },
     "autoload-dev": {

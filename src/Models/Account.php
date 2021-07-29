@@ -17,27 +17,33 @@ namespace AmoCRM\Models;
  */
 class Account extends AbstractModel
 {
+    private $params = [
+        'amojo_id',
+        'amojo_rights',
+        'users_groups',
+        'task_types',
+        'version',
+        'entity_names',
+        'datetime_settings'
+    ];
+
     /**
      * Данные по аккаунту
      *
-     * Получение информации по аккаунту в котором произведена авторизация:
-     * название, оплаченный период, пользователи аккаунта и их права,
-     * справочники дополнительных полей контактов и сделок, справочник статусов сделок,
-     * справочник типов событий, справочник типов задач и другие параметры аккаунта.
+     * Получение информации по аккаунту в котором произведена авторизация
      *
-     * @link https://developers.amocrm.ru/rest_api/accounts_current.php
-     * @param bool $short Краткий формат, только основные поля
-     * @param array $parameters Массив параметров к amoCRM API
+     * @link https://www.amocrm.ru/developers/content/crm_platform/account-info
+     * @param array $parameters массив параметров для GET-параметра with
      * @return array Ответ amoCRM API
      */
-    public function apiCurrent($short = false, $parameters = [])
+    public function apiCurrent($params = [])
     {
-        $result = $this->getRequest('/private/api/v2/json/accounts/current', $parameters);
+        $params = $this->setWithParams($params);
 
-        return $short ? $this->getShorted($result['account']) : $result['account'];
+        return $result = $this->getRequest('/api/v4/account', $params);
     }
 
-    /**
+    /** НЕ АКТУАЛЬНО!!!
      * Возвращает сведения о пользователе по его логину.
      * Если не указывать логин, вернутся сведения о владельце API ключа.
      *
@@ -60,49 +66,5 @@ class Account extends AbstractModel
         }
 
         return false;
-    }
-
-    /**
-     * Урезание значения возвращаемого методом apiCurrent,
-     * оставляет только основные поля такие как 'id', 'name', 'type_id', 'enums'
-     *
-     * @param array $account Ответ amoCRM API
-     * @return mixed Краткий ответ amoCRM API
-     */
-    private function getShorted($account)
-    {
-        $keys = array_fill_keys(['id', 'name', 'login'], 1);
-        $account['users'] = array_map(function($val) use ($keys) {
-            return array_intersect_key($val, $keys);
-        }, $account['users']);
-
-        $keys = array_fill_keys(['id', 'name'], 1);
-        $account['leads_statuses'] = array_map(function($val) use ($keys) {
-            return array_intersect_key($val, $keys);
-        }, $account['leads_statuses']);
-
-        $keys = array_fill_keys(['id', 'name'], 1);
-        $account['note_types'] = array_map(function($val) use ($keys) {
-            return array_intersect_key($val, $keys);
-        }, $account['note_types']);
-
-        $keys = array_fill_keys(['id', 'name'], 1);
-        $account['task_types'] = array_map(function($val) use ($keys) {
-            return array_intersect_key($val, $keys);
-        }, $account['task_types']);
-
-        $keys = array_fill_keys(['id', 'name', 'type_id', 'enums'], 1);
-        foreach ($account['custom_fields'] AS $type => $fields) {
-            $account['custom_fields'][$type] = array_map(function($val) use ($keys) {
-                return array_intersect_key($val, $keys);
-            }, $fields);
-        }
-
-        $keys = array_fill_keys(['id', 'label', 'name'], 1);
-        $account['pipelines'] = array_map(function($val) use ($keys) {
-            return array_intersect_key($val, $keys);
-        }, $account['pipelines']);
-
-        return $account;
     }
 }

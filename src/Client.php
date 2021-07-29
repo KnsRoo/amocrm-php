@@ -64,8 +64,15 @@ class Client
      * @param string $apikey Ключ пользователя amoCRM
      * @param string|null $proxy Прокси сервер для отправки запроса
      */
-    public function __construct($domain, $login, $apikey, $proxy = null)
+    //public function __construct($domain, $login, $apikey, $proxy = null)
+    //public function __construct($domain, $accessToken)
+    public function __construct()
     {
+        $a = func_get_args();
+        $i = func_num_args();
+
+        $domain = $a[0];
+
         // Разернуть поддомен в полный домен
         if (strpos($domain, '.') === false) {
             $domain = sprintf('%s.amocrm.ru', $domain);
@@ -73,11 +80,23 @@ class Client
 
         $this->parameters = new ParamsBag();
         $this->parameters->addAuth('domain', $domain);
-        $this->parameters->addAuth('login', $login);
-        $this->parameters->addAuth('apikey', $apikey);
 
-        if ($proxy !== null) {
-            $this->parameters->addProxy($proxy);
+        if ($i == 2) {
+          $accessToken = $a[1];
+          $this->parameters->addAuth('accessToken', $accessToken);
+          $this->parameters->addAuth('authType', 'oauth2');
+        } else {
+          $login = $a[1];
+          $apikey = $a[2];
+          $proxy = $a[3];
+
+          $this->parameters->addAuth('login', $login);
+          $this->parameters->addAuth('apikey', $apikey);
+
+          if ($proxy !== null) {
+              $this->parameters->addProxy($proxy);
+          }
+
         }
 
         $this->fields = new Fields();
