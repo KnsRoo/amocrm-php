@@ -25,6 +25,8 @@ class Request
      * @var bool Использовать устаревшую схему авторизации
      */
     protected $v1 = false;
+    protected $v2 = false;
+    protected $v4 = false;
 
     /**
      * @var bool Флаг вывода отладочной информации
@@ -34,12 +36,12 @@ class Request
     /**
      * @var ParamsBag|null Экземпляр ParamsBag для хранения аргументов
      */
-    protected $parameters = null;
+    private $parameters = null;
 
     /**
      * @var CurlHandle Экземпляр CurlHandle
      */
-    protected $curlHandle;
+    private $curlHandle;
 
     /**
      * @var int|null Последний полученный HTTP код
@@ -118,7 +120,6 @@ class Request
      */
     protected function getRequest($url, $parameters = [], $modified = null)
     {
-
         if (!empty($parameters)) {
             $this->parameters->addGet($parameters);
         }
@@ -139,15 +140,6 @@ class Request
     {
         if (!empty($parameters)) {
             $this->parameters->addPost($parameters);
-        }
-
-        return $this->request($url);
-    }
-
-    protected function patchRequest($url, $parameters = [])
-    {
-        if (!empty($parameters)) {
-            $this->parameters->addPatch($parameters);
         }
 
         return $this->request($url);
@@ -237,16 +229,13 @@ class Request
             $fields = json_encode([
                 'request' => $this->parameters->getPost(),
             ]);
+            if ($this->v4){
+                $fields = json_encode($this->parameters->getPost());
+            }
+            if ($this->v2){
+                $fields = json_encode($this->parameters->getPost());
+            }
             curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $fields);
-            $this->printDebug('post params', $fields);
-        }
-
-        if ($this->parameters->hasPatch()) {
-            $fields = json_encode([
-                'request' => $this->parameters->getPatch(),
-            ]);
-            curl_setopt($curl, CURLOPT_CUSTOMREQUEST, 'PATCH');
             curl_setopt($ch, CURLOPT_POSTFIELDS, $fields);
             $this->printDebug('post params', $fields);
         }
@@ -289,32 +278,30 @@ class Request
     {
         $result = json_decode($response, true);
 
-        //TODO
-        //Попробовать получить токен в случае неудачи
-        if ($info['http_code'] == 401){
-            throw new Exception('Unauthorized', 401);
+        if ($this->v4 || $this->v2){
+            return $result;
         }
 
         if (floor($info['http_code'] / 100) >= 3) {
-            if (isset($result['error_code']) && $result['error_code'] > 0) {
-                $code = $result['error_code'];
+            if (isset($result['response']['error_code']) && $result['response']['error_code'] > 0) {
+                $code = $result['response']['error_code'];
             } elseif ($result !== null) {
                 $code = 0;
             } else {
                 $code = $info['http_code'];
             }
-            if ($this->v1 === false && isset($result['detail'])) {
-                throw new Exception($result['detail'], $code);
-            } elseif (isset($result)) {
-                throw new Exception(json_encode($result));
+            if ($this->v1 === false && isset($result['response']['error'])) {
+                throw new Exception($result['response']['error'], $code);
+            } elseif (isset($result['response'])) {
+                throw new Exception(json_encode($result['response']));
             } else {
-                throw new Exception('Invalid response body.', $code);
+                throw new Exception($code.': Invalid response body. '.json_encode($result), $code);
             }
-        } elseif (!isset($result)) {
+        } elseif (!isset($result['response'])) {
             return false;
         }
 
-        return $result;
+        return $result['response'];
     }
 
     /**
@@ -327,6 +314,7 @@ class Request
      */
     protected function printDebug($key = '', $value = null, $return = false)
     {
+
         if ($this->debug !== true) {
             return false;
         }

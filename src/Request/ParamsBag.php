@@ -33,11 +33,6 @@ class ParamsBag
     private $postParams = [];
 
     /**
-     * @var array Список значений PATCH параметров
-     */
-    private $patchParams = [];
-
-    /**
      * @var string|null Прокси сервер для отправки запроса
      */
     private $proxy = null;
@@ -158,17 +153,6 @@ class ParamsBag
         return $this;
     }
 
-    public function addPatch($name, $value = null)
-    {
-        if (is_array($name) && $value === null) {
-            $this->patchParams = array_merge($this->patchParams, $name);
-        } else {
-            $this->patchParams[$name] = $value;
-        }
-
-        return $this;
-    }
-
     /**
      * Получение POST параметра по ключу или список параметров
      *
@@ -184,15 +168,6 @@ class ParamsBag
         return $this->postParams;
     }
 
-    public function getPatch($name = null)
-    {
-        if ($name !== null) {
-            return isset($this->patchParams[$name]) ? $this->patchParams[$name] : null;
-        }
-
-        return $this->patchParams;
-    }
-
     /**
      * Получение количества POST параметров
      *
@@ -201,11 +176,6 @@ class ParamsBag
     public function hasPost()
     {
         return count($this->postParams) ? true : false;
-    }
-
-    public function hasPatch()
-    {
-        return count($this->patchParams) ? true : false;
     }
 
     /**

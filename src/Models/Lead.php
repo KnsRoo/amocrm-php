@@ -3,13 +3,9 @@
 namespace AmoCRM\Models;
 
 use AmoCRM\Models\Traits\SetNote;
-use AmoCRM\Models\Traits\addTags;
-use AmoCRM\Models\Traits\addCompany;
-use AmoCRM\Models\Traits\addContact;
+use AmoCRM\Models\Traits\SetTags;
 use AmoCRM\Models\Traits\SetDateCreate;
 use AmoCRM\Models\Traits\SetLastModified;
-
-use AmoCRM\Exception;
 
 /**
  * Class Lead
@@ -26,74 +22,31 @@ use AmoCRM\Exception;
  */
 class Lead extends AbstractModel
 {
-    use SetNote, addTags, addCompany, addContact;
+    use SetNote, SetTags, SetDateCreate, SetLastModified;
 
-    protected $name = 'leads';
-    protected $path = 'leads';
-
+    /**
+     * @var array Список доступный полей для модели (исключая кастомные поля)
+     */
     protected $fields = [
-        'id',
-        'price',
         'name',
-        'responsible_user_id',
-        'group_id',
+        'date_create',
+        'last_modified',
         'status_id',
         'pipeline_id',
+        'price',
+        'responsible_user_id',
+        'created_user_id',
+        'request_id',
+        'linked_company_id',
+        'unlink',
+        'tags',
+        'visitor_uid',
+        'notes',
+        'modified_user_id',
         'loss_reason_id',
-        'source_id',
-        'created_by',
-        'created_at',
-        'updated_at',
-        'closest_task_at',
-        'is_deleted',
-        'custom_fields_values',
-        'score',
-        'account_id',
-        'is_price_modified_by_robot',
-        '_embedded',
     ];
 
-    protected $avaliable_with_params = [
-        'catalog_elements',
-        'is_price_modified_by_robot',
-        'loss_reason',
-        'contacts',
-        'only_deleted',
-        'source_id'
-    ];
-
-    protected $avaliable_order_params = [
-        'created_at',
-        'updated_at',
-        'id'
-    ];
-
-    protected $params = [];
-
-    public static function saveCollection(Array $collection){
-        $leadsForUpdate = [];
-        $leadsForCreate = [];
-
-        foreach ($collection as $item) {
-            if ($item->id){
-                $leadsForUpdate[] = $item->getValues();
-            } else {
-                $leadsForCreate[] = $item->getValues();
-            }
-        }
-
-        $response1; $response2;
-
-        if (!empty($leadsForUpdate)){
-            $response1 = $this->patchRequest('/api/v4/leads', $leadsForUpdate);
-        }
-
-        if (!empty($leadsForCreate)){
-            $response2 = $this->postRequest('/api/v4/leads', $leadsForCreate);
-        }
-
-        return array_merge($response1, $response2);
-    }
+    public $catalog_elements_id = [];
 
     /**
      * Список сделок
@@ -106,30 +59,30 @@ class Lead extends AbstractModel
      * @param null|string $modified Дополнительная фильтрация по (изменено с)
      * @return array Ответ amoCRM API
      */
-    public function apiList($params = [], $modified = null)
+    public function apiList($parameters, $modified = null)
     {
+        $response = $this->getRequest('/private/api/v2/json/leads/list', $parameters, $modified);
 
-        $parameters = $this->setWithParams($params, $this->avaliable_params);
+        return isset($response['leads']) ? $response['leads'] : [];
+    }
 
-        if (!empty($params['page'])){
-            $parameters['page'] = $params['page'];
+    public function apiListv4($elements = [])
+    {
+        $this->v4 = true;
+
+        $ids_str = '?id[]=' . implode('id[]=', $elements);
+
+        $response = $this->getRequest("/api/v4/leads/".$elements['id']);
+
+        if (isset($response['_embedded']['leads'])) {
+            $result = array_map(function ($item) {
+                return $item['id'];
+            }, $response['_embedded']['leads']);
+        } else {
+            return [];
         }
 
-        if (!empty($params['limit'])){
-            $parameters['limit'] = $params['limit'];
-        }
-
-        if (!empty($params['filter'])){
-            $parameters['filter'] = $params['filter'];
-        }
-
-        if (!empty($params['order'])){
-            $parameters['order'] = $params['order'];
-        }
-
-        $response = $this->getRequest('/api/v4/leads', $parameters, $modified);
-
-        return isset($response['_embedded']['leads']) ? $response['_embedded']['leads'] : [];
+        return count($elements) == 1 ? array_shift($result) : $result;
     }
 
     /**
@@ -141,21 +94,31 @@ class Lead extends AbstractModel
      * @param array $leads Массив сделок для пакетного добавления
      * @return int|array Уникальный идентификатор сделки или массив при пакетном добавлении
      */
-    public function apiAdd(Array $leads = [])
+    public function apiAdd($leads = [])
     {
         if (empty($leads)) {
             $leads = [$this];
         }
 
-        $parameters = [];
+        $parameters = [
+            'leads' => [
+                'add' => [],
+            ],
+        ];
 
         foreach ($leads AS $lead) {
-            $parameters[] = $lead->getValues();
+            $parameters['leads']['add'][] = $lead->getValues();
         }
 
-        $response = $this->postRequest('/api/v4/leads', $parameters);
+        $response = $this->postRequest('/private/api/v2/json/leads/set', $parameters);
 
-        isset($response['_embedded']['leads']) ? $response['_embedded']['leads'] : [];
+        if (isset($response['leads']['add'])) {
+            $result = array_map(function($item) {
+                return $item['id'];
+            }, $response['leads']['add']);
+        } else {
+            return [];
+        }
 
         return count($leads) == 1 ? array_shift($result) : $result;
     }
@@ -175,16 +138,46 @@ class Lead extends AbstractModel
     {
         $this->checkId($id);
 
-        $parameters = [];
+        $parameters = [
+            'leads' => [
+                'update' => [],
+            ],
+        ];
 
         $lead = $this->getValues();
-        $lead->id = $id;
-        $lead->last_modified = strtotime($modified);
+        $lead['id'] = $id;
+        $lead['last_modified'] = strtotime($modified);
 
-        $parameters[] = $lead;
+        $parameters['leads']['update'][] = $lead;
 
-        $response = $this->patchRequest("/api/v4/leads/{$id}", $parameters);
+        $response = $this->postRequest('/private/api/v2/json/leads/set', $parameters);
 
-        return empty($response);
+        return empty($response['leads']['update']['errors']);
+    }
+
+    public function addCatalogElements($catalogId, $elements){
+        $this->catalog_elements_id[$catalogId] = $elements;
+    }
+
+    public function apiUpdatev2($id, $modified = 'now')
+    {
+        $this->v2 = true;
+
+        $this->checkId($id);
+
+        $parameters = [
+            'update' => [],
+        ];
+
+        $lead = $this->getValues();
+        $lead['id'] = $id;
+        $lead['last_modified'] = strtotime($modified);
+        $lead['catalog_elements_id'] = $this->catalog_elements_id;
+
+        $parameters['update'][] = $lead;
+
+        $response = $this->postRequest('/api/v2/leads', $parameters);
+        
+        return $response;
     }
 }

@@ -17,70 +17,32 @@ namespace AmoCRM\Models;
  */
 class Pipelines extends AbstractModel
 {
-
-    protected $name = 'pipelines';
-    protected $path = 'leads/pipelines';
     /**
      * @var array Список доступный полей для модели (исключая кастомные поля)
      */
     protected $fields = [
-        'id',
         'name',
         'sort',
         'is_main',
-        'is_unsorted_on',
-        'is_archive',
-        'account_id',
-        '_embedded'
+        'statuses',
     ];
 
-    private $filters = [];
+    /**
+     * Сеттер для поля - является ли воронка "главной"
+     *
+     * @param string $flag Флаг состояния
+     * @return $this
+     */
+    public function setIsMain($flag)
+    {
+        if ($flag) {
+            $this->values['is_main'] = 'on';
+        } else {
+            unset($this->values['is_main']);
+        }
 
-    public function find($filters = []){
-        $this->filters = array_merge($this->filters, $filters);
         return $this;
     }
-
-    public function addStatus(Array $statuses){
-
-    }
-
-    public function editStatus(){
-
-    }
-
-    public function removeStatus($id){
-
-    }
-
-    public function getStatuses(){
-        return $this->_embedded['statuses'];
-    }
-
-    public function getAll(){
-        $result = [];
-        $response = $this->getRequest('/api/v4/'.$this->path, $this->params);
-
-        if (isset($response['_embedded']['pipelines'])){
-            foreach ($response['_embedded']['pipelines'] as $pipeline) {
-                $result[] = $this->getModelFromData($pipeline);
-            }
-        }
-
-        $filtered = [];
-
-        foreach ($this->filters as $key => $filter){
-            foreach ($result as $item){
-                if ($item[$key] == $filter){
-                    $filtered[] = $item;
-                }
-            }
-            $result = $filtered;
-        }
-
-        return $result;
-    }
-
 
     /**
      * Список воронок и этапов продаж

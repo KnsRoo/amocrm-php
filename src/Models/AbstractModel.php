@@ -20,214 +20,122 @@ use AmoCRM\Request\Request;
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-abstract class AbstractModel extends Request implements ModelInterface
+abstract class AbstractModel extends Request implements ArrayAccess, ModelInterface
 {
-    protected $name = '';
-    protected $path = '';
     /**
      * @var array Список доступный полей для модели (исключая кастомные поля)
      */
     protected $fields = [];
-    /**
-     * @var array Список GET параметров
-     */
-    protected $params = [];
 
     /**
-     * @var array Список доступный полей для параметра with
+     * @var array Список значений полей для модели
      */
-    protected $avaliable_with_params = [];
+    protected $values = [];
 
     /**
-     * @var array Список правил для полей модели
-     */
-    protected $rules = [];
-
-    /**
-     * Возвращает название Модели
+     * Возвращает называние Модели
      *
      * @return mixed
      */
-
     public function __toString()
     {
-        return static::class;
+        return json_encode($this->getValues());
     }
 
-    public function find(Array $params = []){
-        foreach ($params as $key => $value) {
-            $this->params['filter['.$key.']'] = $value;
-        }
-
-        return $this;
+    /**
+     * Определяет, существует ли заданное поле модели
+     *
+     * @link http://php.net/manual/en/arrayaccess.offsetexists.php
+     * @param mixed $offset Название поля для проверки
+     * @return boolean Возвращает true или false
+     */
+    public function offsetExists($offset)
+    {
+        return isset($this->values[$offset]);
     }
 
-    public function with(Array $params = []){
-        $this->params = array_merge($this->params,$this->setWithParams($params, $this->avaliable_params));
-        return $this;
-    }
-
-    public function limit($limit = 250){
-        $this->params['limit'] = $limit;
-        return $this; 
-    }
-
-    public function page($page = 1){
-        $this->params['page'] = $page;
-        return $this;
-    }
-
-    public function order($field, $sort){
-        if (!in_array($sort,['asc','desc'])){
-            throw new Exception('unsupported sort type');
-        }
-        if (!in_array($field, $this->avaliable_order_params)){
-            throw new Exception('unsupported field type');
-        }
-        $this->params['order['.$field.']' ] = $sort;
-        return $this;
-    }
-
-    public function save(){
-        $parameters = $this->getValues();
-        $response = null;
-
-        if (method_exists($this, 'id') && (!empty($this->id))){
-            $response = $this->patchRequest('/api/v4/'.$this->path, [$parameters]);
-        } else {
-            $response = $this->postRequest('/api/v4/'.$this->path, [$parameters]);
-        }
-
-        return $response['_embedded'][$this->name][0]['id'] ? $response['_embedded'][$this->name][0]['id'] : false;
-    }
-
-    public function getAll(){
-        $entities = [];
-        $page = 1;
-        while (true) {
-            $this->page($page);
-            $response = $this->getRequest('/api/v4/'.$this->path, $this->params);
-            if (!$response) break;
-            $entities = array_merge($entities, $response['_embedded'][$this->name]);
-            $page++;
-        } 
-
-        $result = [];
-
-        foreach ($entities as $item) {
-            $result[] = $this->getModelFromData($item);
-        }
-
-        return $result;
-    }
-
-    public function get(){
-        $response = $this->getRequest('/api/v4/'.$this->path, $this->params, null);
-        $result = [];
-
-        if (isset($response['_embedded'][$this->name])){
-            foreach ($response['_embedded'][$this->name] as $item) {
-                $result[] = $this->getModelFromData($item);
-            }
-        }
-
-        return $result;
-    }
-
-    public function first(){
-        $this->params['limit'] = 1;
-        $response = $this->getRequest('/api/v4/'.$this->name, $this->params, null);
-        $result = null;
-
-        if (isset($response['_embedded'][$this->name]) && (!empty($response['_embedded'][$this->name]))){
-            $result = $this->getModelFromData($response['_embedded'][$this->name][0]);
-        }
-
-        return $result;
-    }
-
-    public function getValues(){
-        $parameters = [];
-
-        foreach ($this->fields as $field) {
-            if (method_exists($this, $field)){
-                $parameters[$field] = $this->$field;
-            }
-        }
-
-        return $parameters;
-    }
-
-    public function asArray(){
-        $result = [];
-
-        foreach ($this->fields as $field) {
-            if (method_exists($this, $field)){
-                $result[$field] = $this->$field;
-            }
-        }
-
-        return $result;
-    }
-
-    protected function getModelFromData($data){
-        $className = get_class($this);
-        $model = new $className($this->parameters, $this->curlHandle);
-        foreach ($data as $field => $value) {
-            $model->$field = $value; 
-        }        
-        return $model;
-    }
-
-    protected function setWithParams($params, $available){
-
-        if (!array_key_exists('with', $params)){
-            $params['with'] = [];
-        }
-
-        if (!empty($params)){
-            $params = $params['with'];
-
-            if (in_array('all', $params)){
-                $params = $this->available;
-            }
-            $params = [ 'with' => implode(',', $params)];
-        }
-        return $params;
-    }
-
-    public function __set($field, $value){
-        if (method_exists($this, 'id') && !empty($this->id)){
-            return new Exception('id is readonly');
-        }
-
-        if (in_array($field, $this->fields)){
-            $this->$field = $value;
-        } else{
-            return new Exception('field is not exists');
-        }
-    }
-
-    public function __get($field){
-
-        if (method_exists($this, $field)){
-            return call_user_func([$this, $field]);
-        } else {
-            return new Exception('field is not exists');
+    /**
+     * Возвращает заданное поле модели
+     *
+     * @link http://php.net/manual/en/arrayaccess.offsetget.php
+     * @param mixed $offset Название поля для возврата
+     * @return mixed Значение поля
+     */
+    public function offsetGet($offset)
+    {
+        if (isset($this->values[$offset])) {
+            return $this->values[$offset];
         }
 
         return null;
     }
 
     /**
+     * Устанавливает заданное поле модели
+     *
+     * Если есть сеттер модели, то будет использовать сеттер
+     *
+     * @link http://php.net/manual/en/arrayaccess.offsetset.php
+     * @param mixed $offset Название поля, которому будет присваиваться значение
+     * @param mixed $value Значение для присвоения
+     */
+    public function offsetSet($offset, $value)
+    {
+        $setter = 'set' . Format::camelCase($offset);
+
+        if (method_exists($this, $setter)) {
+            return $this->$setter($value);
+        } elseif (in_array($offset, $this->fields)) {
+            $this->values[$offset] = $value;
+        }
+    }
+
+    /**
      * Удаляет поле модели
      *
      * @link http://php.net/manual/en/arrayaccess.offsetunset.php
-     * @param mixed $field Название поля для удаления
+     * @param mixed $offset Название поля для удаления
      */
-    public function __unset($field)
+    public function offsetUnset($offset)
     {
-        unset($this->$field);
+        if (isset($this->values[$offset])) {
+            unset($this->values[$offset]);
+        }
+    }
+
+    /**
+     * Получение списка значений полей модели
+     *
+     * @return array Список значений полей модели
+     */
+    public function getValues()
+    {
+        return $this->values;
+    }
+
+
+    public function getCustomField($id){
+        $filtered = array_filter($this->values['custom_fields'], function ($v) use ($id){
+            return $v['id'] == $id;
+        });
+
+        $element = array_pop($filtered);
+
+        if (empty($element['values'][0]['value'])) return null;
+
+        return $element['values'][0]['value'];
+    }
+
+    public function addEnumValue($id, $enum){
+        $this->values['custom_fields_values'][] = [
+            'field_id' => $id,
+            'values' => [
+                'enum_id' => $enum
+            ]
+        ];
+
+        var_dump($this->values);
+        return $this;
     }
 
     /**
@@ -239,12 +147,19 @@ abstract class AbstractModel extends Request implements ModelInterface
      * @param mixed $subtype Тип подтипа поля
      * @return $this
      */
-    public function addCustomField($id, $value, $enum = false, $subtype = false)
+    public function addCustomField($id, $value, $v4 = false, $enum = false, $subtype = false)
     {
         $field = [
             'id' => $id,
             'values' => [],
         ];
+
+        if ($v4){
+            $field = [
+                'field_id' => (Integer)$id,
+                'values' => [],
+            ];
+        }
 
         if (!is_array($value)) {
             $values = [[$value, $enum]];
@@ -270,7 +185,11 @@ abstract class AbstractModel extends Request implements ModelInterface
             $field['values'][] = $fieldValue;
         }
 
-        $this->values['custom_fields'][] = $field;
+        if ($v4){
+            $this->values['custom_fields_values'][] = $field;
+        } else {
+            $this->values['custom_fields'][] = $field;
+        }
 
         return $this;
     }

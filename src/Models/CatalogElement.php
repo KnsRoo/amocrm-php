@@ -81,6 +81,62 @@ class CatalogElement extends AbstractModel
         return count($elements) == 1 ? array_shift($result) : $result;
     }
 
+    public function apiAddv2($elements = [])
+    {
+        $this->v2 = true;
+
+        if (empty($elements)) {
+            $elements = [$this];
+        }
+
+        $parameters = [
+            'add' => [],
+        ];
+
+        foreach ($elements AS $element) {
+            $parameters['add'][] = $element->getValues();
+        }
+
+        $response = $this->postRequest('/api/v2/catalog_elements', $parameters);
+
+        if (isset($response['_embedded']['items'])) {
+            $result = array_map(function ($item) {
+                return $item['id'];
+            }, $response['_embedded']['ietms']);
+        } else {
+            return [];
+        }
+
+        return count($elements) == 1 ? array_shift($result) : $result;
+    }
+
+    public function apiAddv4($elements = [], $catalogId)
+    {
+        $this->v4 = true;
+
+        if (empty($elements)) {
+            $elements = [$this];
+        }
+
+        $parameters = [];
+
+        foreach ($elements AS $element) {
+            $parameters[] = $element->getValues();
+        }
+
+        $response = $this->postRequest("/api/v4/catalogs/{$catalogId}/elements", $parameters);
+
+        if (isset($response['_embedded']['elements'])) {
+            $result = array_map(function ($item) {
+                return $item['id'];
+            }, $response['_embedded']['elements']);
+        } else {
+            return [];
+        }
+
+        return count($elements) == 1 ? array_shift($result) : $result;
+    }
+
     /**
      * Обновление элементов каталога
      *
